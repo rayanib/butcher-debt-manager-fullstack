@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Butcher Debt - Customers</title>
+  <link rel="stylesheet" href="/app.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="title">Customers</div>
+
+        <div class="search">
+          <span style="opacity:.8">🔎</span>
+          <input id="q" placeholder="Search customer..." />
+        </div>
+
+        <button class="btn" id="addBtn">+ Customer</button>
+
+        <div class="rel">
+          <button class="icon-btn" id="bellBtn" title="Notifications">🔔
+            <span class="badge" id="bellBadge" style="display:none">0</span>
+          </button>
+        </div>
+
+        <div class="rel">
+          <button class="icon-btn" id="menuBtn" title="Menu">☰</button>
+          <div class="dropdown" id="menuDrop" style="width:220px">
+            <div class="head">Menu</div>
+            <div class="item" id="pricesBtn">
+              <div class="who">Prices</div>
+              <div class="amt">›</div>
+            </div>
+            <div class="item" id="alertsBtn">
+              <div class="who">Notifications</div>
+              <div class="amt">›</div>
+            </div>
+            <div class="item" id="logoutBtn">
+              <div class="who">Logout</div>
+              <div class="amt">›</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="list" id="list"></div>
+      <div class="empty" id="empty" style="display:none;">No customers found.</div>
+
+      <!-- ✅ totals bar -->
+      <div class="totals-bar" id="totalsBar" style="display:none;">
+        <div>
+          <div class="totals-title">Total debt</div>
+          <div class="totals-sub" id="totalsSub">—</div>
+        </div>
+        <div class="totals-amount" id="totalsAmount">₪0.00</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- add customer modal -->
+  <div class="modal" id="modal">
+    <div class="box">
+      <header>
+        <div class="title">New Customer</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="closeModal">✕</button>
+      </header>
+      <div class="content">
+        <div class="field">
+          <label>Name</label>
+          <input id="mName" placeholder="Customer name (Arabic/Hebrew supported)" />
+        </div>
+        <div class="field">
+          <label>Phone (optional)</label>
+          <input id="mPhone" placeholder="05..." />
+        </div>
+        <button class="btn" id="saveCustomer" style="width:100%;">Save</button>
+        <div class="small" id="mMsg" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function api(url, opts={}) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    headers: {"Content-Type":"application/json"},
+    ...opts
+  });
+  const data = await res.json().catch(()=> ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function money(n){
+  const x = Number(n||0);
+  return "₪" + x.toFixed(2);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+const q = document.getElementById("q");
+const list = document.getElementById("list");
+const empty = document.getElementById("empty");
+
+const bellBtn = document.getElementById("bellBtn");
+const bellBadge = document.getElementById("bellBadge");
+
+function rowHtml(c){
+  const danger = c.balance >= 1000 ? "danger" : "";
+  const last = c.ageDays ? `${c.ageDays} days` : "—";
+
+  return `
+    <div class="row clean-row" data-id="${c.id}">
+      <div style="min-width:0">
+        <div class="name">${escapeHtml(c.name)}</div>
+        <div class="meta">Debt age: ${last}</div>
+      </div>
+      <div class="debt ${danger}">${money(c.balance)}</div>
+    </div>
+  `;
+}
+
+async function loadTotals(){
+  const data = await api("/api/stats");
+  const total = Number(data.total || 0);
+
+  const bar = document.getElementById("totalsBar");
+  const amountEl = document.getElementById("totalsAmount");
+  const subEl = document.getElementById("totalsSub");
+
+  amountEl.textContent = money(total);
+  subEl.textContent = "Active customers only";
+  bar.style.display = "flex";
+}
+
+async function loadCustomers(){
+  const search = q.value.trim();
+  const customers = await api(`/api/customers?search=${encodeURIComponent(search)}`);
+  list.innerHTML = customers.map(rowHtml).join("");
+  empty.style.display = customers.length ? "none" : "block";
+  await loadTotals();
+}
+
+list.addEventListener("click", (e) => {
+  const r = e.target.closest(".row");
+  if (!r) return;
+  const id = r.getAttribute("data-id");
+  location.href = `/customer.html?id=${encodeURIComponent(id)}`;
+});
+
+// modal
+const modal = document.getElementById("modal");
+document.getElementById("addBtn").onclick = ()=>{
+  document.getElementById("mMsg").textContent="";
+  document.getElementById("mName").value="";
+  document.getElementById("mPhone").value="";
+  modal.classList.add("open");
+  setTimeout(()=>document.getElementById("mName").focus(), 50);
+};
+document.getElementById("closeModal").onclick = ()=> modal.classList.remove("open");
+modal.addEventListener("click", (e)=>{ if(e.target === modal) modal.classList.remove("open"); });
+
+document.getElementById("saveCustomer").onclick = async ()=>{
+  const name = document.getElementById("mName").value.trim();
+  const phone = document.getElementById("mPhone").value.trim();
+  const msg = document.getElementById("mMsg");
+  msg.textContent="";
+  if(!name){ msg.textContent="Name is required."; return; }
+  try{
+    await api("/api/customers", {method:"POST", body: JSON.stringify({name, phone})});
+    modal.classList.remove("open");
+    await loadCustomers();
+    await loadAlertsBadge();
+  }catch(e){
+    msg.textContent = e.message;
+  }
+};
+
+// alerts badge
+async function loadAlertsBadge(){
+  const data = await api("/api/alerts/summary?mode=biggest&limit=80");
+  const count = Number(data.count || 0);
+
+  if(count > 0){
+    bellBadge.style.display="inline-flex";
+    bellBadge.textContent = String(count);
+  } else {
+    bellBadge.style.display="none";
+  }
+}
+
+bellBtn.onclick = () => location.href = "/alerts.html";
+
+// menu
+const menuBtn = document.getElementById("menuBtn");
+const menuDrop = document.getElementById("menuDrop");
+
+menuBtn.onclick = ()=> menuDrop.classList.toggle("open");
+
+document.getElementById("pricesBtn").onclick = ()=> location.href="/prices.html";
+document.getElementById("alertsBtn").onclick = ()=> location.href="/alerts.html";
+document.getElementById("logoutBtn").onclick = async ()=>{
+  await api("/api/logout", {method:"POST"});
+  location.href="/login.html";
+};
+
+document.addEventListener("click", (e)=>{
+  if(!e.target.closest("#menuBtn") && !e.target.closest("#menuDrop")) menuDrop.classList.remove("open");
+});
+
+// init
+(async ()=>{
+  const me = await fetch("/api/me").then(r=>r.json()).catch(()=>({loggedIn:false}));
+  if(!me.loggedIn) location.href="/login.html";
+
+  q.focus();
+  q.addEventListener("input", ()=> loadCustomers());
+
+  await loadCustomers();
+  await loadAlertsBadge();
+})();
+</script>
+</body>
+</html>

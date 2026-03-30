@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Butcher Debt - Customer</title>
+  <link rel="stylesheet" href="/app.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <button class="icon-btn" id="backBtn" title="Back">←</button>
+        <div>
+          <div class="title" id="cName">Customer</div>
+          <div class="small" id="cPhone"></div>
+        </div>
+        <div class="spacer"></div>
+
+        <div class="rel">
+          <button class="icon-btn" id="moreBtn" title="More">⋯</button>
+          <div class="dropdown" id="moreDrop" style="width:260px">
+            <div class="head">Actions</div>
+            <div class="item" id="editCustomerBtn"><div class="who">Edit customer</div><div class="amt">›</div></div>
+            <div class="item" id="archiveBtn" style="display:none"><div class="who">Archive (paid)</div><div class="amt">›</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="small">Current balance</div>
+          <div class="huge" id="balance">₪0.00</div>
+          <div class="small" id="age">Debt age: —</div>
+        </div>
+
+        <div class="panel">
+          <div class="small">Quick info</div>
+          <div style="margin-top:10px">
+            <div class="pill"><b>Tip:</b> Click a row to edit • Click the note to copy • No delete/undo in safety mode</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="purchaseBtn">+ Purchase</button>
+        <button class="btn secondary" id="paymentBtn">+ Payment</button>
+      </div>
+
+      <div style="padding:0 16px 16px">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Details</th>
+              <th>Amount</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="hist"></tbody>
+        </table>
+        <div class="small" style="margin-top:10px;color:var(--muted)">
+          Click any row to edit. Destructive delete/undo is disabled in safety mode.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- purchase modal -->
+  <div class="modal" id="purchaseModal">
+    <div class="box">
+      <header>
+        <div class="title">Add Purchase</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="closePurchase">✕</button>
+      </header>
+
+      <div class="content">
+        <div class="field">
+          <label>Item</label>
+
+          <div class="auto-wrap">
+            <input id="pItem" placeholder="Search item..." autocomplete="off"/>
+            <div class="auto-list" id="autoList"></div>
+          </div>
+
+          <div class="small" style="margin-top:6px;color:var(--muted)">
+            Start typing (Arabic/Hebrew supported). Use ↑ ↓ and Enter.
+          </div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label>Quantity</label>
+            <input id="pQty" type="number" step="0.01" value="1"/>
+            <div class="qty-quick">
+              <button class="mini-act" type="button" data-qadd="0.5">+0.5</button>
+              <button class="mini-act" type="button" data-qadd="1">+1</button>
+              <button class="mini-act" type="button" data-qadd="2">+2</button>
+              <button class="mini-act danger" type="button" data-qreset="1">Reset</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Unit price</label>
+            <div class="adv-wrap">
+              <input id="pUnit" type="number" step="0.01" placeholder="Auto" />
+              <button class="mini-act" type="button" id="toggleManualPrice">Manual</button>
+            </div>
+            <div class="small" id="manualHint" style="display:none;margin-top:6px;color:var(--muted)">
+              Manual price mode is ON (use only when needed).
+            </div>
+          </div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label>Extras amount</label>
+            <input id="pExtrasAmount" type="number" step="0.01" value="0" placeholder="0"/>
+          </div>
+
+          <div class="field">
+            <label>Extras details</label>
+            <input id="pExtrasNote" placeholder="e.g. kola + homs"/>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:10px;padding:12px 14px">
+          <div class="small">Live total</div>
+          <div id="purchasePreview" style="font-weight:900;font-size:24px;margin-top:6px">₪0.00</div>
+          <div class="small" id="purchaseBreakdown" style="margin-top:4px;color:var(--muted)">
+            Base: ₪0.00 • Extras: ₪0.00
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Note (optional)</label>
+          <input id="pNote" placeholder="Optional note (clickable later to copy)"/>
+        </div>
+
+        <button class="btn" id="savePurchase" style="width:100%;">Save</button>
+        <div class="small" id="pMsg" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- payment modal -->
+  <div class="modal" id="paymentModal">
+    <div class="box">
+      <header>
+        <div class="title">Add Payment</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="closePayment">✕</button>
+      </header>
+      <div class="content">
+        <div class="field">
+          <label>Amount</label>
+          <input id="payAmount" type="number" step="0.01" placeholder="200"/>
+        </div>
+        <div class="field">
+          <label>Note (optional)</label>
+          <input id="payNote" placeholder="Optional note"/>
+        </div>
+        <button class="btn" id="savePayment" style="width:100%;">Save</button>
+        <div class="small" id="payMsg" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- edit customer modal -->
+  <div class="modal" id="editModal">
+    <div class="box">
+      <header>
+        <div class="title">Edit Customer</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="closeEdit">✕</button>
+      </header>
+      <div class="content">
+        <div class="field">
+          <label>Name</label>
+          <input id="eName"/>
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input id="ePhone"/>
+        </div>
+        <button class="btn" id="saveEdit" style="width:100%;">Save</button>
+        <div class="small" id="eMsg" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- edit transaction modal -->
+  <div class="modal" id="txnModal">
+    <div class="box">
+      <header>
+        <div class="title" id="txnTitle">Edit</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="closeTxn">✕</button>
+      </header>
+
+      <div class="content" id="txnPurchaseFields" style="display:none;">
+        <div class="field">
+          <label>Item</label>
+          <input id="tItem" />
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Quantity</label>
+            <input id="tQty" type="number" step="0.01" />
+          </div>
+          <div class="field">
+            <label>Unit price</label>
+            <input id="tUnit" type="number" step="0.01" />
+          </div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label>Extras amount</label>
+            <input id="tExtrasAmount" type="number" step="0.01" />
+          </div>
+          <div class="field">
+            <label>Extras details</label>
+            <input id="tExtrasNote" />
+          </div>
+        </div>
+      </div>
+
+      <div class="content" id="txnPaymentFields" style="display:none;">
+        <div class="field">
+          <label>Amount</label>
+          <input id="tAmount" type="number" step="0.01" />
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="field">
+          <label>Note</label>
+          <input id="tNote" />
+          <div class="small" style="margin-top:6px;color:var(--muted)">
+            Tip: Keep notes short (easier to read in the table).
+          </div>
+        </div>
+
+        <button class="btn" id="saveTxn" style="width:100%;">Save changes</button>
+
+        <div class="small" id="tMsg" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function api(url, opts = {}) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    ...opts
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function money(n){ return "₪" + Number(n || 0).toFixed(2); }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+const params = new URLSearchParams(location.search);
+const id = Number(params.get("id"));
+if (!id) location.href = "/index.html";
+
+document.getElementById("backBtn").onclick = ()=> location.href="/index.html";
+
+// more menu
+const moreBtn = document.getElementById("moreBtn");
+const moreDrop = document.getElementById("moreDrop");
+moreBtn.onclick = ()=> moreDrop.classList.toggle("open");
+document.addEventListener("click", (e)=>{
+  if (!e.target.closest("#moreBtn") && !e.target.closest("#moreDrop")) {
+    moreDrop.classList.remove("open");
+  }
+});
+
+// modals helpers
+function openModal(m){ m.classList.add("open"); }
+function closeModal(m){ m.classList.remove("open"); }
+function bindClose(modal, closeBtn){
+  closeBtn.onclick = ()=> closeModal(modal);
+  modal.addEventListener("click", (e)=>{ if (e.target === modal) closeModal(modal); });
+}
+
+const purchaseModal = document.getElementById("purchaseModal");
+const paymentModal  = document.getElementById("paymentModal");
+const editModal     = document.getElementById("editModal");
+const txnModal      = document.getElementById("txnModal");
+
+bindClose(purchaseModal, document.getElementById("closePurchase"));
+bindClose(paymentModal, document.getElementById("closePayment"));
+bindClose(editModal, document.getElementById("closeEdit"));
+bindClose(txnModal, document.getElementById("closeTxn"));
+
+function updatePurchasePreview(){
+  const qty = Number(document.getElementById("pQty").value || 0);
+  const unit = Number(document.getElementById("pUnit").value || 0);
+  const extras = Number(document.getElementById("pExtrasAmount").value || 0);
+
+  const base = qty * unit;
+  const total = base + extras;
+
+  document.getElementById("purchasePreview").textContent = money(total);
+  document.getElementById("purchaseBreakdown").textContent =
+    `Base: ${money(base)} • Extras: ${money(extras)}`;
+}
+
+document.getElementById("purchaseBtn").onclick = ()=> {
+  document.getElementById("pMsg").textContent = "";
+  document.getElementById("pItem").value = "";
+  document.getElementById("pQty").value = "1";
+  document.getElementById("pUnit").value = "";
+  document.getElementById("pExtrasAmount").value = "0";
+  document.getElementById("pExtrasNote").value = "";
+  document.getElementById("pNote").value = "";
+  autoHideList();
+  manualPrice(false);
+  updatePurchasePreview();
+  openModal(purchaseModal);
+  setTimeout(()=>document.getElementById("pItem").focus(), 50);
+};
+
+document.getElementById("paymentBtn").onclick = ()=> {
+  document.getElementById("payMsg").textContent = "";
+  document.getElementById("payAmount").value = "";
+  document.getElementById("payNote").value = "";
+  openModal(paymentModal);
+  setTimeout(()=>document.getElementById("payAmount").focus(), 50);
+};
+
+document.getElementById("editCustomerBtn").onclick = ()=> {
+  document.getElementById("eMsg").textContent = "";
+  openModal(editModal);
+  moreDrop.classList.remove("open");
+};
+
+document.getElementById("archiveBtn").onclick = async ()=> {
+  moreDrop.classList.remove("open");
+  if (!confirm("Archive this customer (paid)?")) return;
+  await api(`/api/customers/${id}/archive`, { method:"POST" });
+  location.href = "/index.html";
+};
+
+/* ---------------------------
+   Custom autocomplete (prices)
+---------------------------- */
+let priceItems = [];
+let filteredItems = [];
+let autoIndex = -1;
+let manualPriceMode = false;
+
+const itemInput = document.getElementById("pItem");
+const listEl = document.getElementById("autoList");
+const unitInput = document.getElementById("pUnit");
+
+function autoHideList(){
+  listEl.style.display = "none";
+  listEl.innerHTML = "";
+  autoIndex = -1;
+}
+
+function manualPrice(on){
+  manualPriceMode = !!on;
+  const hint = document.getElementById("manualHint");
+  hint.style.display = manualPriceMode ? "block" : "none";
+  unitInput.readOnly = !manualPriceMode;
+  if (!manualPriceMode) unitInput.blur();
+}
+
+document.getElementById("toggleManualPrice").onclick = ()=>{
+  manualPrice(!manualPriceMode);
+};
+
+async function loadPricesIntoAutocomplete(){
+  priceItems = await api("/api/prices");
+
+  itemInput.addEventListener("input", ()=>{
+    const q = itemInput.value.trim().toLowerCase();
+    autoIndex = -1;
+
+    if (!q) {
+      autoHideList();
+      return;
+    }
+
+    filteredItems = priceItems.filter(p =>
+      String(p.item).toLowerCase().includes(q)
+    ).slice(0, 10);
+
+    if (filteredItems.length === 0) {
+      autoHideList();
+      return;
+    }
+
+    listEl.innerHTML = filteredItems.map((p, i)=>`
+      <div class="auto-item" data-i="${i}">
+        <span class="auto-name">${escapeHtml(p.item)}</span>
+        <span class="auto-price">${money(p.unit_price)}</span>
+      </div>
+    `).join("");
+
+    listEl.style.display = "block";
+
+    listEl.querySelectorAll(".auto-item").forEach(el=>{
+      el.onclick = ()=>{
+        const i = Number(el.getAttribute("data-i"));
+        selectItem(filteredItems[i]);
+      };
+    });
+  });
+
+  itemInput.addEventListener("keydown", (e)=>{
+    const items = listEl.querySelectorAll(".auto-item");
+    if (!items.length) return;
+
+    if (e.key === "ArrowDown") {
+      autoIndex = (autoIndex + 1) % items.length;
+      e.preventDefault();
+    } else if (e.key === "ArrowUp") {
+      autoIndex = (autoIndex - 1 + items.length) % items.length;
+      e.preventDefault();
+    } else if (e.key === "Enter") {
+      if (autoIndex >= 0) {
+        items[autoIndex].click();
+        e.preventDefault();
+      }
+      return;
+    } else if (e.key === "Escape") {
+      autoHideList();
+      return;
+    } else {
+      return;
+    }
+
+    items.forEach(el=>el.classList.remove("active"));
+    items[autoIndex].classList.add("active");
+    items[autoIndex].scrollIntoView({ block:"nearest" });
+  });
+
+  document.addEventListener("click", (e)=>{
+    if (!e.target.closest(".auto-wrap")) autoHideList();
+  });
+
+  function selectItem(p){
+    itemInput.value = p.item;
+    if (!manualPriceMode) {
+      unitInput.value = String(Number(p.unit_price));
+    }
+    autoHideList();
+    updatePurchasePreview();
+  }
+}
+
+/* ---------------------------
+   Quantity quick buttons
+---------------------------- */
+document.querySelectorAll("[data-qadd]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const add = Number(btn.getAttribute("data-qadd"));
+    const cur = Number(document.getElementById("pQty").value || 0);
+    document.getElementById("pQty").value = String((cur + add).toFixed(2));
+    updatePurchasePreview();
+  });
+});
+
+document.querySelectorAll("[data-qreset]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.getElementById("pQty").value = "1";
+    updatePurchasePreview();
+  });
+});
+
+["pQty", "pUnit", "pExtrasAmount"].forEach(fieldId=>{
+  const el = document.getElementById(fieldId);
+  if (el) el.addEventListener("input", updatePurchasePreview);
+});
+
+/* ---------------------------
+   Ledger editing (row click)
+---------------------------- */
+let editingLedgerId = null;
+let editingType = null;
+
+function openTxnModal(type, row){
+  editingLedgerId = row.id;
+  editingType = type;
+
+  document.getElementById("tMsg").textContent = "";
+
+  const purchaseFields = document.getElementById("txnPurchaseFields");
+  const paymentFields  = document.getElementById("txnPaymentFields");
+
+  if (type === "purchase") {
+    document.getElementById("txnTitle").textContent = "Edit Purchase";
+    purchaseFields.style.display = "block";
+    paymentFields.style.display = "none";
+
+    document.getElementById("tItem").value = row.item || "";
+    document.getElementById("tQty").value  = String(row.quantity || 1);
+    document.getElementById("tUnit").value = String(row.unit_price || 0);
+    document.getElementById("tExtrasAmount").value = String(row.extras_amount || 0);
+    document.getElementById("tExtrasNote").value = row.extras_note || "";
+  } else {
+    document.getElementById("txnTitle").textContent = "Edit Payment";
+    purchaseFields.style.display = "none";
+    paymentFields.style.display = "block";
+
+    document.getElementById("tAmount").value = String(row.amount || 0);
+  }
+
+  document.getElementById("tNote").value = row.note || "";
+  openModal(txnModal);
+}
+
+document.getElementById("saveTxn").onclick = async ()=>{
+  const msg = document.getElementById("tMsg");
+  msg.textContent = "";
+
+  try {
+    if (editingType === "purchase") {
+      const item = document.getElementById("tItem").value.trim();
+      const quantity = Number(document.getElementById("tQty").value);
+      const unit_price = Number(document.getElementById("tUnit").value);
+      const extras_amount = Number(document.getElementById("tExtrasAmount").value || 0);
+      const extras_note = document.getElementById("tExtrasNote").value.trim();
+      const note = document.getElementById("tNote").value.trim();
+
+      if (!item) { msg.textContent = "Item is required."; return; }
+      if (!(quantity > 0)) { msg.textContent = "Quantity must be > 0."; return; }
+      if (!(unit_price > 0)) { msg.textContent = "Unit price must be > 0."; return; }
+      if (extras_amount < 0) { msg.textContent = "Extras amount cannot be negative."; return; }
+
+      await api(`/api/customers/${id}/ledger/${editingLedgerId}`, {
+        method:"PATCH",
+        body: JSON.stringify({
+          type:"purchase",
+          item,
+          quantity,
+          unit_price,
+          extras_amount,
+          extras_note,
+          note
+        })
+      });
+    } else {
+      const amount = Number(document.getElementById("tAmount").value);
+      const note = document.getElementById("tNote").value.trim();
+
+      if (!(amount > 0)) { msg.textContent = "Amount must be > 0."; return; }
+
+      await api(`/api/customers/${id}/ledger/${editingLedgerId}`, {
+        method:"PATCH",
+        body: JSON.stringify({ type:"payment", amount, note })
+      });
+    }
+
+    closeModal(txnModal);
+    await refresh();
+  } catch (e) {
+    msg.textContent = e.message;
+  }
+};
+
+/* ---------------------------
+   Refresh customer + history
+---------------------------- */
+async function refresh(){
+  const c = await api(`/api/customers/${id}`);
+  document.getElementById("cName").textContent = c.name;
+  document.getElementById("cPhone").textContent = c.phone ? ("📞 " + c.phone) : "";
+  document.getElementById("balance").textContent = money(c.balance);
+  document.getElementById("age").textContent = "Debt age: " + (c.ageDays ? (c.ageDays + " days") : "—");
+
+  document.getElementById("archiveBtn").style.display = (Number(c.balance) <= 0) ? "flex" : "none";
+
+  document.getElementById("eName").value = c.name;
+  document.getElementById("ePhone").value = c.phone || "";
+
+  const hist = await api(`/api/customers/${id}/history`);
+  const tbody = document.getElementById("hist");
+
+  tbody.innerHTML = hist.map(h=>{
+    const isPurchase = h.type === "purchase";
+    const pill = isPurchase
+      ? `<span class="pill purchase"><b>Purchase</b></span>`
+      : `<span class="pill payment"><b>Payment</b></span>`;
+
+    const main = isPurchase
+      ? `${money(h.unit_price)} × ${Number(h.quantity).toFixed(2)} • ${escapeHtml(h.item)}`
+      : `Payment`;
+
+    const extrasLine = isPurchase && Number(h.extras_amount || 0) > 0
+      ? `<div class="hist-extra">Extras: ${escapeHtml(h.extras_note || "Extra items")} • ${money(h.extras_amount)}</div>`
+      : "";
+
+    const note = (h.note && String(h.note).trim())
+      ? `<div class="hist-note note-copy" data-copy="${escapeHtml(h.note)}" title="Click to copy">${escapeHtml(h.note)}</div>`
+      : `<div class="hist-note empty">—</div>`;
+
+    const detailsHtml = `<div class="hist-details">
+      <div class="hist-main">${main}</div>
+      ${extrasLine}
+      ${note}
+    </div>`;
+
+    const amt = isPurchase ? money(h.amount) : ("-" + money(h.amount));
+    const dt = String(h.created_at || "").replace("T"," ").slice(0,19);
+
+    return `
+      <tr class="click-row" data-ledger-id="${h.id}">
+        <td>${pill}</td>
+        <td>${detailsHtml}</td>
+        <td style="font-weight:950">${amt}</td>
+        <td class="small">${dt}</td>
+      </tr>
+    `;
+  }).join("");
+
+  tbody.onclick = async (e)=>{
+    const copy = e.target.closest("[data-copy]");
+    if (copy) {
+      e.stopPropagation();
+      const text = copy.getAttribute("data-copy");
+      navigator.clipboard.writeText(text).catch(()=>{});
+      return;
+    }
+
+    const tr = e.target.closest("tr[data-ledger-id]");
+    if (!tr) return;
+
+    const ledgerId = Number(tr.getAttribute("data-ledger-id"));
+    const row = await api(`/api/customers/${id}/ledger/${ledgerId}`);
+    openTxnModal(row.type, row);
+  };
+}
+
+/* ---------------------------
+   Save purchase/payment/customer
+---------------------------- */
+document.getElementById("savePurchase").onclick = async ()=>{
+  const msg = document.getElementById("pMsg");
+  msg.textContent = "";
+
+  const item = document.getElementById("pItem").value.trim();
+  const quantity = Number(document.getElementById("pQty").value);
+  const unit_price = Number(document.getElementById("pUnit").value);
+  const extras_amount = Number(document.getElementById("pExtrasAmount").value || 0);
+  const extras_note = document.getElementById("pExtrasNote").value.trim();
+  const note = document.getElementById("pNote").value.trim();
+
+  if (!item) { msg.textContent = "Item is required."; return; }
+  if (!(quantity > 0)) { msg.textContent = "Quantity must be > 0."; return; }
+  if (!(unit_price > 0)) { msg.textContent = "Unit price is missing. Select item or enable Manual."; return; }
+  if (extras_amount < 0) { msg.textContent = "Extras amount cannot be negative."; return; }
+
+  await api(`/api/customers/${id}/purchase`, {
+    method:"POST",
+    body: JSON.stringify({ item, quantity, unit_price, extras_amount, extras_note, note })
+  });
+
+  closeModal(purchaseModal);
+  await refresh();
+};
+
+document.getElementById("savePayment").onclick = async ()=>{
+  const msg = document.getElementById("payMsg");
+  msg.textContent = "";
+
+  const amount = Number(document.getElementById("payAmount").value);
+  const note = document.getElementById("payNote").value.trim();
+
+  if (!(amount > 0)) { msg.textContent = "Amount must be > 0."; return; }
+
+  await api(`/api/customers/${id}/payment`, {
+    method:"POST",
+    body: JSON.stringify({ amount, note })
+  });
+
+  closeModal(paymentModal);
+  await refresh();
+};
+
+document.getElementById("saveEdit").onclick = async ()=>{
+  const msg = document.getElementById("eMsg");
+  msg.textContent = "";
+
+  const name = document.getElementById("eName").value.trim();
+  const phone = document.getElementById("ePhone").value.trim();
+
+  if (!name) { msg.textContent = "Name is required."; return; }
+
+  await api(`/api/customers/${id}`, {
+    method:"PATCH",
+    body: JSON.stringify({ name, phone })
+  });
+
+  closeModal(editModal);
+  await refresh();
+};
+
+(async ()=>{
+  const me = await fetch("/api/me").then(r=>r.json()).catch(()=>({ loggedIn:false }));
+  if (!me.loggedIn) location.href = "/login.html";
+
+  await loadPricesIntoAutocomplete();
+  await refresh();
+})();
+</script>
+</body>
+</html>

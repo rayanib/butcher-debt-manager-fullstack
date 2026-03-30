@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Butcher Debt - Notifications</title>
+  <link rel="stylesheet" href="/app.css"/>
+  <style>
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{
+      padding:10px 12px;border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.06);
+      cursor:pointer;font-weight:900;font-size:13px;
+    }
+    .tab.active{background:var(--accent);color:#07101f;border-color:transparent}
+    .right{margin-left:auto}
+    .mini{font-size:12px;color:var(--muted)}
+    .row .actions{display:flex;gap:8px;margin-left:10px}
+    .tinybtn{
+      padding:8px 10px;border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      cursor:pointer;font-weight:900;font-size:12px;
+    }
+    .tinybtn:hover{background:rgba(255,255,255,.10)}
+    .bucketbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <button class="icon-btn" id="backBtn" title="Back">←</button>
+        <div>
+          <div class="title">Notifications</div>
+          <div class="mini" id="subText">Actionable only (snoozed items hidden)</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="pill" id="countPill">0</div>
+      </div>
+
+      <div style="padding:14px 16px;border-bottom:1px solid var(--line)">
+        <div class="tabs" id="tabs">
+          <button class="tab active" data-mode="biggest">Biggest debts</button>
+          <button class="tab" data-mode="oldest">Oldest debts</button>
+          <button class="tab" data-mode="inactive">No activity</button>
+          <button class="tab" data-mode="all">All flagged (incl. snoozed)</button>
+        </div>
+
+        <div class="bucketbar mini" id="buckets"></div>
+      </div>
+
+      <div class="list" id="list"></div>
+      <div class="empty" id="empty" style="display:none;">No notifications ✅</div>
+    </div>
+  </div>
+
+<script>
+async function api(url, opts={}) {
+  const res = await fetch(url, { headers: {"Content-Type":"application/json"}, ...opts });
+  const data = await res.json().catch(()=> ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+function money(n){ return "₪" + Number(n||0).toFixed(2); }
+function esc(s){
+  return String(s).replace(/[&<>"']/g, m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+function fmtDate(s){
+  if(!s) return "—";
+  return String(s).slice(0,16);
+}
+function reasonText(a){
+  const parts = [];
+  if ((a.reasons||[]).includes("DEBT_1000")) parts.push("Debt ≥ ₪1000");
+  if ((a.reasons||[]).includes("AGE_30_DAYS")) parts.push(`Age ${a.ageDays} days`);
+  if ((a.reasons||[]).includes("NO_ACTIVITY_14_DAYS")) parts.push(`No activity ${a.inactiveDays} days`);
+  if (a.snoozedUntil) parts.push(`Snoozed until ${a.snoozedUntil.slice(0,10)}`);
+  return parts.join(" • ");
+}
+function bucketLine(b){
+  return `Aging buckets — 0–30: <b>${b["0-30"]||0}</b> • 31–60: <b>${b["31-60"]||0}</b> • 61–180: <b>${b["61-180"]||0}</b> • 180+: <b>${b["180+"]||0}</b>`;
+}
+
+const backBtn = document.getElementById("backBtn");
+backBtn.onclick = ()=> location.href="/index.html";
+
+const list = document.getElementById("list");
+const empty = document.getElementById("empty");
+const countPill = document.getElementById("countPill");
+const bucketsEl = document.getElementById("buckets");
+const subText = document.getElementById("subText");
+const tabs = document.getElementById("tabs");
+
+let currentMode = "biggest";
+
+async function load(mode){
+  currentMode = mode;
+
+  subText.textContent = (mode === "all")
+    ? "All flagged customers (includes snoozed)"
+    : "Actionable only (snoozed items hidden)";
+
+  const data = await api(`/api/alerts/summary?mode=${encodeURIComponent(mode)}&limit=80`);
+
+  countPill.textContent = (mode === "all")
+    ? `${data.totalFlagged}`
+    : `${data.count}`;
+
+  bucketsEl.innerHTML = `<span>${bucketLine(data.buckets || {})}</span>`;
+
+  const alerts = data.alerts || [];
+
+  if(alerts.length === 0){
+    empty.style.display="block";
+    list.innerHTML="";
+    return;
+  }
+  empty.style.display="none";
+
+  list.innerHTML = alerts.map(a => `
+    <div class="row" data-id="${a.id}">
+      <div style="min-width:0">
+        <div class="name">${esc(a.name)}</div>
+        <div class="meta">${esc(reasonText(a))}</div>
+        <div class="meta">First debt: ${fmtDate(a.firstDebtAt)} • Last activity: ${fmtDate(a.lastActivityAt)} • Bucket: ${esc(a.bucket)}</div>
+      </div>
+
+      <div class="debt ${a.balance>=1000 ? "danger" : ""}">${money(a.balance)}</div>
+
+      <div class="actions">
+        ${a.snoozedUntil ? `
+          <button class="tinybtn" data-unsnooze="${a.id}">Unsnooze</button>
+        ` : `
+          <button class="tinybtn" data-snooze="${a.id}" data-days="7">Snooze 7d</button>
+          <button class="tinybtn" data-snooze="${a.id}" data-days="30">Snooze 30d</button>
+        `}
+      </div>
+    </div>
+  `).join("");
+}
+
+tabs.addEventListener("click", async (e)=>{
+  const btn = e.target.closest(".tab");
+  if(!btn) return;
+  const mode = btn.getAttribute("data-mode");
+
+  [...tabs.querySelectorAll(".tab")].forEach(t=>t.classList.remove("active"));
+  btn.classList.add("active");
+
+  await load(mode);
+});
+
+list.addEventListener("click", async (e)=>{
+  const snoozeBtn = e.target.closest("[data-snooze]");
+  if(snoozeBtn){
+    e.stopPropagation();
+    const id = Number(snoozeBtn.getAttribute("data-snooze"));
+    const days = Number(snoozeBtn.getAttribute("data-days") || 7);
+
+    await api("/api/alerts/snooze", {
+      method:"POST",
+      body: JSON.stringify({ customer_id: id, days, reason: "Manual snooze" })
+    });
+    await load(currentMode);
+    return;
+  }
+
+  const uns = e.target.closest("[data-unsnooze]");
+  if(uns){
+    e.stopPropagation();
+    const id = Number(uns.getAttribute("data-unsnooze"));
+    await api("/api/alerts/unsnooze", {
+      method:"POST",
+      body: JSON.stringify({ customer_id: id })
+    });
+    await load(currentMode);
+    return;
+  }
+
+  const row = e.target.closest(".row");
+  if(!row) return;
+  const id = row.getAttribute("data-id");
+  location.href = `/customer.html?id=${encodeURIComponent(id)}`;
+});
+
+(async ()=>{
+  const me = await fetch("/api/me").then(r=>r.json()).catch(()=>({loggedIn:false}));
+  if(!me.loggedIn) location.href="/login.html";
+
+  await load("biggest");
+})();
+</script>
+</body>
+</html>

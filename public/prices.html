@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Butcher Debt - Prices</title>
+  <link rel="stylesheet" href="/app.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <button class="icon-btn" id="backBtn" title="Back">←</button>
+        <div class="title">Prices</div>
+        <div class="spacer"></div>
+        <button class="btn" id="addBtn">+ Item</button>
+      </div>
+
+      <div style="padding:16px">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Unit price</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="small" style="margin-top:10px;color:var(--muted)">
+          Tip: You can use Arabic/Hebrew names. These prices auto-fill in “Add Purchase”.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="box">
+      <header>
+        <div class="title">Add / Update Price</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="close">✕</button>
+      </header>
+      <div class="content">
+        <div class="field">
+          <label>Item</label>
+          <input id="item" placeholder="e.g. شورما / צלעות / Drinks"/>
+        </div>
+        <div class="field">
+          <label>Unit price</label>
+          <input id="price" type="number" step="0.01" placeholder="100"/>
+        </div>
+        <button class="btn" id="save" style="width:100%;">Save</button>
+        <div class="small" id="msg" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function api(url, opts = {}) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    ...opts
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+function money(n){ return "₪" + Number(n||0).toFixed(2); }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+document.getElementById("backBtn").onclick = ()=> location.href="/index.html";
+
+const rows = document.getElementById("rows");
+
+async function load(){
+  const items = await api("/api/prices");
+  rows.innerHTML = items.map(p=>`
+    <tr>
+      <td style="font-weight:900">${escapeHtml(p.item)}</td>
+      <td>${money(p.unit_price)}</td>
+      <td style="text-align:right">
+        <button class="btn secondary" data-edit="${escapeHtml(p.item)}">Edit</button>
+        <button class="btn secondary" data-del="${escapeHtml(p.item)}">Delete</button>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="3" class="small">No prices yet.</td></tr>`;
+}
+
+const modal = document.getElementById("modal");
+const itemIn = document.getElementById("item");
+const priceIn = document.getElementById("price");
+const msg = document.getElementById("msg");
+
+function openModal(){
+  msg.textContent="";
+  modal.classList.add("open");
+  setTimeout(()=>itemIn.focus(),50);
+}
+function closeModal(){ modal.classList.remove("open"); }
+
+document.getElementById("addBtn").onclick = ()=>{
+  itemIn.value="";
+  priceIn.value="";
+  openModal();
+};
+document.getElementById("close").onclick = closeModal;
+modal.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(); });
+
+document.getElementById("save").onclick = async ()=>{
+  msg.textContent="";
+  const item = itemIn.value.trim();
+  const unit_price = Number(priceIn.value);
+  if(!item){ msg.textContent="Item is required."; return; }
+  if(!unit_price || unit_price <= 0){ msg.textContent="Unit price must be > 0."; return; }
+
+  await api("/api/prices", {method:"POST", body: JSON.stringify({item, unit_price})});
+  closeModal();
+  await load();
+};
+
+rows.addEventListener("click", async (e)=>{
+  const btn = e.target.closest("button");
+  if(!btn) return;
+
+  const edit = btn.getAttribute("data-edit");
+  const del  = btn.getAttribute("data-del");
+
+  if(edit){
+    itemIn.value = edit;
+    const tr = btn.closest("tr");
+    const priceText = tr.children[1].textContent.replace("₪","");
+    priceIn.value = String(Number(priceText));
+    openModal();
+  }
+  if(del){
+    if(!confirm("Delete this price?")) return;
+    await api("/api/prices", {method:"DELETE", body: JSON.stringify({item: del})});
+    await load();
+  }
+});
+
+(async ()=>{
+  const me = await fetch("/api/me").then(r=>r.json()).catch(()=>({loggedIn:false}));
+  if(!me.loggedIn) location.href="/login.html";
+  await load();
+})();
+</script>
+</body>
+</html>

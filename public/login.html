@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Butcher Debt - Login</title>
+  <link rel="stylesheet" href="/app.css"/>
+</head>
+<body>
+  <div class="container" style="max-width:520px;margin-top:48px;">
+    <div class="card">
+      <div class="header">
+        <div class="title">Login</div>
+      </div>
+
+      <div style="padding:18px;">
+        <div class="field">
+          <label>Username</label>
+          <input id="u" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="p" type="password" autocomplete="current-password" />
+        </div>
+
+        <button class="btn" id="btn" style="width:100%;">Sign in</button>
+        <div id="msg" class="small" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function api(url, opts = {}) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    ...opts
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+document.getElementById("btn").addEventListener("click", async () => {
+  const username = document.getElementById("u").value.trim();
+  const password = document.getElementById("p").value;
+  const msg = document.getElementById("msg");
+  msg.textContent = "";
+  try{
+    await api("/api/login", {method:"POST", body: JSON.stringify({username, password})});
+    location.href = "/index.html";
+  }catch(e){
+    msg.textContent = e.message;
+  }
+});
+
+(async ()=>{
+  const me = await fetch("/api/me").then(r=>r.json()).catch(()=>({loggedIn:false}));
+  if (me.loggedIn) location.href="/index.html";
+})();
+</script>
+</body>
+</html>
