@@ -3,11 +3,20 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const express = require("express");
 const session = require("express-session");
-const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
 
 const db = require("./db.js");
 const { verifyLogin } = require("./auth.js");
+const { getSessionSecret } = require("./config.js");
 const { requireAuth } = require("./middleware.js");
+const {
+  getRequiredText,
+  getOptionalText,
+  getPositiveNumber,
+  getNonNegativeNumber,
+  getPositiveInteger
+} = require("./validation.js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,14 +24,18 @@ const IS_PROD = process.env.NODE_ENV === "production";
 
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+if (IS_PROD) app.set("trust proxy", 1);
 
-app.use(cookieParser());
+// Inline scripts are retained by the current vanilla frontend. Moving them into
+// external modules will allow a strict Content Security Policy in a later pass.
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+
 app.use(
   session({
     name: "butcher.sid",
-    secret: process.env.SESSION_SECRET || "dev_secret_change_me",
+    secret: getSessionSecret(process.env),
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -38,38 +51,13 @@ app.use(express.static(PUBLIC_DIR));
 
 db.initDb();
 
-function badRequest(res, message) {
-  return res.status(400).json({ error: message });
-}
-
-function getRequiredText(value, label, { max = 120 } = {}) {
-  const text = String(value || "").trim();
-  if (!text) throw new Error(`${label} is required.`);
-  if (text.length > max) throw new Error(`${label} is too long.`);
-  return text;
-}
-
-function getOptionalText(value, { max = 300 } = {}) {
-  const text = String(value || "").trim();
-  if (text.length > max) throw new Error(`Text is too long.`);
-  return text;
-}
-
-function getPositiveNumber(value, label) {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num <= 0) {
-    throw new Error(`${label} must be greater than 0.`);
-  }
-  return num;
-}
-
-function getNonNegativeNumber(value, label) {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num < 0) {
-    throw new Error(`${label} cannot be negative.`);
-  }
-  return num;
-}
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again later." }
+});
 
 function enrichCustomer(c) {
   const balance = db.getBalance(c.id);
@@ -81,7 +69,7 @@ function enrichCustomer(c) {
    AUTH
 ---------------------------- */
 
-app.post("/api/login", (req, res) => {
+app.post("/api/login", loginLimiter, (req, res) => {
   const ok = verifyLogin({ ...req.body, env: process.env });
   if (!ok) return res.status(401).json({ error: "Invalid username/password" });
 
@@ -90,7 +78,10 @@ app.post("/api/login", (req, res) => {
 });
 
 app.post("/api/logout", (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  req.session.destroy(() => {
+    res.clearCookie("butcher.sid");
+    res.json({ ok: true });
+  });
 });
 
 app.get("/api/me", (req, res) => {
@@ -126,7 +117,7 @@ app.get("/api/stats", requireAuth, (req, res) => {
 });
 
 app.get("/api/customers/:id", requireAuth, (req, res) => {
-  const id = Number(req.params.id);
+  const id = getPositiveInteger(req.params.id);
   const c = db.getCustomer(id);
   if (!c) return res.status(404).json({ error: "Not found" });
   res.json(enrichCustomer(c));
@@ -134,7 +125,7 @@ app.get("/api/customers/:id", requireAuth, (req, res) => {
 
 app.patch("/api/customers/:id", requireAuth, (req, res) => {
   try {
-    const id = Number(req.params.id);
+    const id = getPositiveInteger(req.params.id);
     const name = getRequiredText(req.body.name, "Name");
     const phone = getOptionalText(req.body.phone, { max: 40 });
     db.updateCustomer(id, name, phone);
@@ -145,7 +136,7 @@ app.patch("/api/customers/:id", requireAuth, (req, res) => {
 });
 
 app.delete("/api/customers/:id", requireAuth, (req, res) => {
-  const id = Number(req.params.id);
+  const id = getPositiveInteger(req.params.id);
 
   const c = db.getCustomer(id);
   if (!c) return res.status(404).json({ error: "Customer not found" });
@@ -162,7 +153,7 @@ app.delete("/api/customers/:id", requireAuth, (req, res) => {
 });
 
 app.post("/api/customers/:id/archive", requireAuth, (req, res) => {
-  const id = Number(req.params.id);
+  const id = getPositiveInteger(req.params.id);
   db.archiveCustomer(id);
   res.json({ ok: true });
 });
@@ -172,13 +163,13 @@ app.post("/api/customers/:id/archive", requireAuth, (req, res) => {
 ---------------------------- */
 
 app.get("/api/customers/:id/history", requireAuth, (req, res) => {
-  const id = Number(req.params.id);
+  const id = getPositiveInteger(req.params.id);
   res.json(db.listHistory(id));
 });
 
 app.post("/api/customers/:id/purchase", requireAuth, (req, res) => {
   try {
-    const customer_id = Number(req.params.id);
+    const customer_id = getPositiveInteger(req.params.id);
     const item = getRequiredText(req.body.item, "Item");
     const quantity = getPositiveNumber(req.body.quantity, "Quantity");
     const unit_price = getPositiveNumber(req.body.unit_price, "Unit price");
@@ -204,7 +195,7 @@ app.post("/api/customers/:id/purchase", requireAuth, (req, res) => {
 
 app.post("/api/customers/:id/payment", requireAuth, (req, res) => {
   try {
-    const customer_id = Number(req.params.id);
+    const customer_id = getPositiveInteger(req.params.id);
     const amount = getPositiveNumber(req.body.amount, "Amount");
     const note = getOptionalText(req.body.note, { max: 300 });
 
@@ -221,8 +212,8 @@ app.post("/api/customers/:id/payment", requireAuth, (req, res) => {
 });
 
 app.get("/api/customers/:cid/ledger/:lid", requireAuth, (req, res) => {
-  const customer_id = Number(req.params.cid);
-  const ledger_id = Number(req.params.lid);
+  const customer_id = getPositiveInteger(req.params.cid, "Customer ID");
+  const ledger_id = getPositiveInteger(req.params.lid, "Ledger ID");
 
   const row = db.getLedger(ledger_id);
   if (!row || row.customer_id !== customer_id) {
@@ -233,8 +224,8 @@ app.get("/api/customers/:cid/ledger/:lid", requireAuth, (req, res) => {
 
 app.patch("/api/customers/:cid/ledger/:lid", requireAuth, (req, res) => {
   try {
-    const customer_id = Number(req.params.cid);
-    const ledger_id = Number(req.params.lid);
+    const customer_id = getPositiveInteger(req.params.cid, "Customer ID");
+    const ledger_id = getPositiveInteger(req.params.lid, "Ledger ID");
 
     const row = db.getLedger(ledger_id);
     if (!row || row.customer_id !== customer_id) {
@@ -264,7 +255,7 @@ app.patch("/api/customers/:cid/ledger/:lid", requireAuth, (req, res) => {
       return res.json({ ok: true });
     }
 
-    return badRequest(res, "Invalid type");
+    return res.status(400).json({ error: "Invalid type" });
   } catch (e) {
     res.status(400).json({ error: e.message || String(e) });
   }
@@ -401,6 +392,27 @@ app.delete("/api/prices", requireAuth, (req, res) => {
 
 app.get("/", (req, res) => res.redirect("/login.html"));
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running: http://localhost:${PORT}/login.html`);
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
 });
+
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "API endpoint not found" });
+});
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error.name === "ValidationError") {
+    return res.status(400).json({ error: error.message });
+  }
+  console.error(error);
+  return res.status(500).json({ error: "Internal server error" });
+});
+
+if (require.main === module) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running: http://localhost:${PORT}/login.html`);
+  });
+}
+
+module.exports = app;

@@ -220,10 +220,6 @@ function updatePayment(id, { amount, note = "" }) {
   `).run(a, String(note || ""), id);
 }
 
-function deleteLedger(id) {
-  db.prepare(`DELETE FROM ledger WHERE id=?`).run(id);
-}
-
 function getBalance(customer_id) {
   const row = db.prepare(`
     SELECT
@@ -276,16 +272,6 @@ function lastActivityDays(customer_id) {
   return Math.max(0, days);
 }
 
-function undoLastAction(customer_id) {
-  const last = db.prepare(`
-    SELECT id FROM ledger WHERE customer_id=? ORDER BY id DESC LIMIT 1
-  `).get(customer_id);
-
-  if (!last) return false;
-  db.prepare("DELETE FROM ledger WHERE id=?").run(last.id);
-  return true;
-}
-
 /* ---------------------------
    PRICES
 ---------------------------- */
@@ -308,13 +294,6 @@ function deletePrice(item) {
 /* ---------------------------
    ALERT SNOOZE
 ---------------------------- */
-
-function getSnoozeUntil(customer_id) {
-  const row = db.prepare(`
-    SELECT snooze_until FROM alert_snoozes WHERE customer_id=?
-  `).get(customer_id);
-  return row ? String(row.snooze_until) : null;
-}
 
 function setSnooze(customer_id, snooze_until, reason = "") {
   db.prepare(`
@@ -360,20 +339,15 @@ module.exports = {
   getLedger,
   updatePurchase,
   updatePayment,
-  deleteLedger,
-
   getBalance,
   getFirstDebtDate,
   getLastActivityDate,
   debtAgeDays,
   lastActivityDays,
-  undoLastAction,
-
   listPrices,
   setPrice,
   deletePrice,
 
-  getSnoozeUntil,
   setSnooze,
   clearSnooze,
   listActiveSnoozesNow
